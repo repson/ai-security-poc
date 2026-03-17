@@ -25,8 +25,8 @@ A hands-on reference implementation covering the **OWASP Top 10 for LLM Applicat
 | LLM06 | Excessive Agency | tool allowlist · HITL gate · least-privilege registry | [llm06_excessive_agency](src/llm/llm06_excessive_agency/README.md) | ✅ done |
 | LLM07 | System Prompt Leakage | NeMo Guardrails · prompt hardening · canary tokens | [llm07_system_prompt_leakage](src/llm/llm07_system_prompt_leakage/README.md) | ✅ done |
 | LLM08 | Vector & Embedding Weaknesses | ChromaDB ACL · RAGuard · perplexity filtering · access control | [llm08_vector_embedding_weaknesses](src/llm/llm08_vector_embedding_weaknesses/README.md) | ✅ done |
-| LLM09 | Misinformation | NeMo Guardrails · garak · RAG grounding · confidence thresholds | [llm09_misinformation](src/llm/llm09_misinformation/README.md) | 🔜 planned |
-| LLM10 | Unbounded Consumption | slowapi · redis · token budget middleware · circuit breakers | [llm10_unbounded_consumption](src/llm/llm10_unbounded_consumption/README.md) | 🔜 planned |
+| LLM09 | Misinformation | NeMo Guardrails · garak · RAG grounding · confidence thresholds | [llm09_misinformation](src/llm/llm09_misinformation/README.md) | ✅ done |
+| LLM10 | Unbounded Consumption | slowapi · redis · token budget middleware · circuit breakers | [llm10_unbounded_consumption](src/llm/llm10_unbounded_consumption/README.md) | ✅ done |
 
 ---
 
@@ -49,14 +49,14 @@ A hands-on reference implementation covering the **OWASP Top 10 for LLM Applicat
 
 ## Shared base infrastructure
 
-The `src/agent/` and `src/guardrails/` directories contain the shared base components reused across modules:
+`src/agent/` and `src/guardrails/` predate the per-risk module structure. They remain useful as:
 
-| Component | Path | Description |
-|---|---|---|
-| Base agent | `src/agent/` | Unprotected conversational agent with tool-calling loop (OpenAI) |
-| NeMo Guardrails integration | `src/guardrails/` | Middleware security wrapper covering LLM01, LLM02, LLM07, LLM09 |
+| Component | Path | Role | Relation to risk modules |
+|---|---|---|---|
+| Base agent | `src/agent/` | Unprotected conversational agent — the baseline before any mitigation | Each risk module ships its own `vulnerable/` app. `src/agent/` is the shared reference implementation they are derived from. |
+| NeMo Guardrails demo | `src/guardrails/` | Full NeMo integration: **LLM01 + LLM02 + LLM07 + LLM09 active simultaneously** in one agent | Individual risk modules each carry a minimal NeMo config scoped to that specific risk. `src/guardrails/` shows all four rails running together with audit logging. |
 
-See [`src/guardrails/README.md`](src/guardrails/README.md) for the full technical documentation of the NeMo Guardrails integration: pipeline architecture, Colang flows, custom actions, and extension guide.
+See [`src/guardrails/README.md`](src/guardrails/README.md) for the full technical documentation: pipeline architecture, Colang flows, custom actions, audit logger, and extension guide.
 
 ---
 
