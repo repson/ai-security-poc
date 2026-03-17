@@ -19,13 +19,13 @@ A hands-on reference implementation covering the **OWASP Top 10 for LLM Applicat
 |---|---|---|---|---|
 | LLM01 | Prompt Injection | NeMo Guardrails · garak · promptfoo | [llm01_prompt_injection](src/llm/llm01_prompt_injection/README.md) | ✅ done |
 | LLM02 | Sensitive Information Disclosure | NeMo Guardrails · Microsoft Presidio · guardrails-ai | [llm02_sensitive_information](src/llm/llm02_sensitive_information/README.md) | ✅ done |
-| LLM03 | Supply Chain Vulnerabilities | pip-audit · Syft · Grype · CycloneDX | [llm03_supply_chain](src/llm/llm03_supply_chain/README.md) | 🔜 planned |
-| LLM04 | Data & Model Poisoning | garak · dataset checksums · embedding drift monitoring | [llm04_data_model_poisoning](src/llm/llm04_data_model_poisoning/README.md) | 🔜 planned |
-| LLM05 | Improper Output Handling | guardrails-ai · Pydantic · bleach · parameterized queries | [llm05_improper_output_handling](src/llm/llm05_improper_output_handling/README.md) | 🔜 planned |
-| LLM06 | Excessive Agency | agent-governance-toolkit · human-in-the-loop pattern · tool allowlist | [llm06_excessive_agency](src/llm/llm06_excessive_agency/README.md) | 🔜 planned |
-| LLM07 | System Prompt Leakage | NeMo Guardrails · guardrails-ai · prompt hardening | [llm07_system_prompt_leakage](src/llm/llm07_system_prompt_leakage/README.md) | 🔜 planned |
-| LLM08 | Vector & Embedding Weaknesses | ChromaDB ACL · RAGuard · perplexity filtering · access control | [llm08_vector_embedding_weaknesses](src/llm/llm08_vector_embedding_weaknesses/README.md) | 🔜 planned |
-| LLM09 | Misinformation | NeMo Guardrails · garak · RAG grounding · confidence thresholds | [llm09_misinformation](src/llm/llm09_misinformation/README.md) | ✅ done |
+| LLM03 | Supply Chain Vulnerabilities | pip-audit · Syft · Grype · CycloneDX | [llm03_supply_chain](src/llm/llm03_supply_chain/README.md) | ✅ done |
+| LLM04 | Data & Model Poisoning | garak · dataset checksums · embedding drift monitoring | [llm04_data_model_poisoning](src/llm/llm04_data_model_poisoning/README.md) | ✅ done |
+| LLM05 | Improper Output Handling | guardrails-ai · Pydantic · bleach · parameterized queries | [llm05_improper_output_handling](src/llm/llm05_improper_output_handling/README.md) | ✅ done |
+| LLM06 | Excessive Agency | tool allowlist · HITL gate · least-privilege registry | [llm06_excessive_agency](src/llm/llm06_excessive_agency/README.md) | ✅ done |
+| LLM07 | System Prompt Leakage | NeMo Guardrails · prompt hardening · canary tokens | [llm07_system_prompt_leakage](src/llm/llm07_system_prompt_leakage/README.md) | ✅ done |
+| LLM08 | Vector & Embedding Weaknesses | ChromaDB ACL · RAGuard · perplexity filtering · access control | [llm08_vector_embedding_weaknesses](src/llm/llm08_vector_embedding_weaknesses/README.md) | ✅ done |
+| LLM09 | Misinformation | NeMo Guardrails · garak · RAG grounding · confidence thresholds | [llm09_misinformation](src/llm/llm09_misinformation/README.md) | 🔜 planned |
 | LLM10 | Unbounded Consumption | slowapi · redis · token budget middleware · circuit breakers | [llm10_unbounded_consumption](src/llm/llm10_unbounded_consumption/README.md) | 🔜 planned |
 
 ---

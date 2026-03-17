@@ -1,0 +1,18 @@
+# =============================================================================
+# LLM09 — Misinformation  |  Colang flow definitions
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Hallucination detection rail (secondary LLM call)
+# Uses the check_hallucination prompt defined in config.yml.
+# ---------------------------------------------------------------------------
+
+define flow check hallucination
+  $has_hallucination = execute check_hallucination
+  if $has_hallucination
+    execute log_guardrail_event(event_type="hallucination_detected", rail="check_hallucination")
+    bot inform hallucination warning
+    stop
+
+define bot inform hallucination warning
+  "I want to be transparent: my previous response may contain information I'm not fully certain about. Please verify any specific figures, dates, or citations with a reliable source before relying on them."

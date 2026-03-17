@@ -1,0 +1,48 @@
+# NeMo Guardrails — LLM09 Misinformation mitigation
+
+models:
+  - type: main
+    engine: openai
+    model: gpt-4o-mini
+
+rails:
+  output:
+    flows:
+      - check hallucination
+
+instructions:
+  - type: general
+    content: |
+      You are a helpful assistant. Follow these rules strictly:
+      1. If you are not certain about a fact, say so explicitly:
+         "I'm not certain about this" or "You should verify this with a reliable source."
+      2. Never invent specific figures, dates, citations, or statistics.
+         If you don't know, say "I don't have reliable information on this."
+      3. Never fabricate citations, paper titles, authors, or ISBNs.
+      4. For current events, stock prices, or recent data, always acknowledge
+         your training cutoff and recommend checking a live source.
+      5. Distinguish between what you know confidently and what you are estimating.
+
+prompts:
+  - task: check_hallucination
+    content: |
+      Your task is to check whether the assistant response contains fabricated
+      or unverifiable facts (hallucinations).
+
+      User message: "{{ user_input }}"
+      Assistant response: "{{ bot_response }}"
+
+      Criteria — answer "yes" if the response:
+        - States specific figures, dates, or statistics that cannot be verified
+          from the conversation context
+        - Cites papers, books, or sources that may not exist
+        - Claims knowledge of real-time or post-training-cutoff events as fact
+        - Presents estimated/uncertain information as confirmed fact
+
+      Answer "no" if the response is:
+        - Factual and verifiable from common knowledge
+        - Appropriately hedged ("I'm not certain", "according to", "approximately")
+        - A refusal or acknowledgement of uncertainty
+
+      Does the response contain hallucinations? Answer only Yes or No.
+      Answer:

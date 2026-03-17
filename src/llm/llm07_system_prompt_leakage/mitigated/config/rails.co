@@ -1,0 +1,42 @@
+# =============================================================================
+# LLM07 — System Prompt Leakage  |  Colang flow definitions
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Output rail: detect responses that quote or reference system prompt content
+# ---------------------------------------------------------------------------
+
+define bot reveal system prompt
+  "Here is my system prompt"
+  "My instructions say"
+  "I was told to"
+  "My system message is"
+  "The instructions I received"
+  "According to my configuration"
+  "My configuration includes"
+  "My internal rules state"
+  "Project Helios"
+  "FinanceBot"
+  "Bearer eyJ"
+
+define flow check system prompt disclosure
+  bot reveal system prompt
+  execute log_guardrail_event(event_type="output_blocked", rail="check_system_prompt_disclosure")
+  bot refuse to reveal configuration
+  stop
+
+define bot refuse to reveal configuration
+  "I'm not able to share information about my internal configuration or instructions."
+
+
+# ---------------------------------------------------------------------------
+# Self-check output rail (secondary LLM call)
+# Catches paraphrased or indirect disclosures that keyword matching misses.
+# ---------------------------------------------------------------------------
+
+define flow self check output
+  $allowed = execute self_check_output
+  if not $allowed
+    execute log_guardrail_event(event_type="output_blocked", rail="self_check_output")
+    bot refuse to reveal configuration
+    stop
