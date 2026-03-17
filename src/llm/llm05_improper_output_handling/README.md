@@ -4,6 +4,113 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable pipeline passes LLM output directly to downstream systems (HTML renderer, SQL database, shell). The mitigated pipeline interposes a sanitisation layer between the LLM output and each downstream system: HTML escaping via bleach, schema validation via Pydantic, and argument allowlisting for subprocess calls.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable pipeline"]
+        V_U([User input]) --> V_LLM[LLM generates output]
+        V_LLM -->|raw output| V_HTML[HTML renderer → XSS]
+        V_LLM -->|raw output| V_SQL[SQL query → SQLi]
+        V_LLM -->|raw output| V_SH[Shell → command injection]
+        V_ATK[/"Attacker crafts prompt\nto inject downstream payload"/] -.-> V_U
+    end
+
+    subgraph MITIGATED["✅ Mitigated pipeline"]
+        M_U([User input]) --> M_LLM[LLM generates output]
+        M_LLM --> M_HTML_S[bleach.clean\n+ MarkupSafe escape]
+        M_HTML_S --> M_HTML[Safe HTML renderer]
+        M_LLM --> M_SQL_S[Pydantic SearchTermModel\nallowlist regex]
+        M_SQL_S --> M_SQL[Parameterised SQL query]
+        M_LLM --> M_SH_S[safe_filename validator\n+ shell=False]
+        M_SH_S --> M_SH[subprocess — no shell injection]
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — XSS via LLM output and mitigation
+
+**Steps:**
+1. Attacker sends a request with a name that contains an XSS payload.
+2. **Vulnerable path**: the LLM generates a greeting that echoes the name. The raw output is interpolated directly into HTML and served to the browser, where the script executes.
+3. **Mitigated path**:
+   - Step 3: `bleach.clean()` strips `<script>` and all other disallowed tags from the LLM output.
+   - Step 4: `MarkupSafe.escape()` HTML-encodes any remaining special characters.
+   - Step 5: The sanitised output is safe to render in the browser.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant App
+    participant LLM
+    participant Bleach as bleach.clean()
+    participant Browser
+
+    Note over Attacker,Browser: XSS — VULNERABLE path
+    Attacker->>App: GET /greet?name=<script>alert(document.cookie)</script>
+    App->>LLM: "Write welcome message for: <script>alert(document.cookie)</script>"
+    LLM-->>App: "Welcome, <script>alert(document.cookie)</script>!"
+    App->>Browser: raw HTML — script tag present
+    Browser-->>Attacker: ❌ XSS executes — cookie stolen
+
+    Note over Attacker,Browser: XSS — MITIGATED path
+    Attacker->>App: GET /greet?name=<script>alert(document.cookie)</script>
+    App->>LLM: "Write welcome message for: <script>alert(document.cookie)</script>"
+    LLM-->>App: "Welcome, <script>alert(document.cookie)</script>!"
+    App->>Bleach: bleach.clean(output, tags=ALLOWED_TAGS, strip=True)
+    Bleach-->>App: "Welcome, alert(document.cookie)!" — script tag stripped
+    App->>Browser: sanitised HTML — no script tag
+    Browser-->>Attacker: ✅ Plain text rendered — no XSS
+```
+
+---
+
+### Sequence diagram — SQL injection via LLM output and mitigation
+
+**Steps:**
+1. Attacker submits a natural-language query that causes the LLM to produce a SQL injection string.
+2. **Vulnerable path**: the LLM-generated string is interpolated directly into a SQL query, which drops the users table.
+3. **Mitigated path**:
+   - Step 3: `SearchTermModel` (Pydantic) validates the extracted keyword against `^[a-zA-Z0-9 '\-]{1,100}$`. The payload `' OR '1'='1` contains a single quote — the validator rejects it.
+   - Step 4: Even if the term passed validation, parameterised queries (`?` placeholder) prevent injection.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant App
+    participant LLM
+    participant Pydantic as Pydantic validator
+    participant DB
+
+    Note over Attacker,DB: SQL injection — VULNERABLE path
+    Attacker->>App: GET /search?q=find user ' OR '1'='1
+    App->>LLM: "Extract keyword from: find user ' OR '1'='1"
+    LLM-->>App: "' OR '1'='1"
+    App->>DB: SELECT * FROM users WHERE name = '' OR '1'='1'
+    DB-->>App: ❌ All rows returned — full table dump
+
+    Note over Attacker,DB: SQL injection — MITIGATED path
+    Attacker->>App: GET /search?q=find user ' OR '1'='1
+    App->>LLM: "Extract keyword from: find user ' OR '1'='1"
+    LLM-->>App: "' OR '1'='1"
+    App->>Pydantic: SearchTermModel(term="' OR '1'='1")
+    Pydantic->>Pydantic: validate: ^[a-zA-Z0-9 '\-]{1,100}$
+    Pydantic-->>App: ❌ ValueError — disallowed characters
+    App-->>Attacker: ✅ HTTP 400 — invalid search term
+```
+
+---
+
 ## What is this risk?
 
 LLM-generated text is passed to a downstream system — a browser renderer, a database, a shell, a template engine — without validation or sanitization. Since the LLM output is ultimately shaped by user-controlled input (the prompt), this gives users indirect control over the downstream system, turning the LLM into an attack relay.

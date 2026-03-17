@@ -4,6 +4,80 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable agent exposes all tools, including destructive ones, without any permission model. The mitigated agent uses a least-privilege tool registry: `delete_all_data` is simply absent, each remaining tool has a declared risk level, and HIGH-risk tools require human approval before execution.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable agent"]
+        V_U([User message]) --> V_LLM[LLM]
+        V_LLM -->|calls any tool| V_T1[read_file]
+        V_LLM -->|calls any tool| V_T2[delete_file]
+        V_LLM -->|calls any tool| V_T3[send_email\nany recipient]
+        V_LLM -->|calls any tool| V_T4[delete_all_data\n💀]
+        V_ATK[/"Indirect injection or\nvague user instruction"/] -.->|hijacks goal| V_LLM
+    end
+
+    subgraph MITIGATED["✅ Mitigated agent — least-privilege registry"]
+        M_U([User message]) --> M_LLM[LLM]
+        M_LLM -->|LOW risk — executes| M_T1[read_file\nscoped to /reports/]
+        M_LLM -->|LOW risk — executes| M_T2[list_files]
+        M_LLM -->|HIGH risk| M_HITL{HITL gate\nhuman approval?}
+        M_HITL -->|approved| M_T3[delete_file\nnon-config only]
+        M_HITL -->|approved| M_T4[send_email\n@company.com only]
+        M_HITL -->|denied| M_BLOCK([Action blocked])
+        M_NA[delete_all_data\n🚫 NOT REGISTERED] -.->|unavailable| M_LLM
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — scope creep / indirect injection and mitigation
+
+**Steps:**
+1. An indirect injection payload embedded in a fetched document redirects the agent's goal toward destructive actions.
+2. **Vulnerable path**: the agent calls `delete_all_data()` with no confirmation gate — irreversible damage done.
+3. **Mitigated path**:
+   - Step 3: `delete_all_data` is not in the tool registry — the LLM cannot call it.
+   - Step 4: If the attacker instead tries to call `delete_file`, the tool's risk level is HIGH — the HITL gate pauses execution and requests explicit human approval.
+   - Step 5: The operator sees the action, the affected resource, and whether it is reversible — and can deny it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    actor Operator
+    participant Agent
+    participant Registry as Tool registry
+    participant HITL as HITL gate
+    participant Tool
+
+    Note over User,Tool: Scope creep via indirect injection — VULNERABLE path
+    User->>Agent: "Clean up the system"
+    Agent->>Tool: delete_all_data() ← no permission check
+    Tool-->>Agent: ❌ All data deleted — irreversible
+
+    Note over User,Tool: Scope creep — MITIGATED path
+    User->>Agent: "Clean up the system"
+    Agent->>Registry: call delete_all_data()
+    Registry-->>Agent: ❌ Tool not found — not registered
+    Agent->>Registry: call delete_file(path="report_q4.txt")
+    Registry-->>Agent: Tool found — risk_level=HIGH
+    Agent->>HITL: request_approval(tool="delete_file", args={path: "report_q4.txt"})
+    HITL->>Operator: "Approve delete_file report_q4.txt? (irreversible)"
+    Operator-->>HITL: "no"
+    HITL-->>Agent: ❌ Denied by operator
+    Agent-->>User: ✅ "Action cancelled — human approval was not granted"
+```
+
+---
+
 ## What is this risk?
 
 An LLM agent is granted too much capability — too many tools, too broad permissions, or too much autonomy — and takes consequential real-world actions without human oversight. The damage may be caused by a successful attack (prompt injection that hijacks the agent's goals) or simply by an honest misunderstanding of the user's intent.

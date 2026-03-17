@@ -4,6 +4,93 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable agent has no runtime monitoring, no kill switch, and a mutable goal — it can be manipulated into persistent rogue behaviour that survives session restarts. The mitigated agent wraps all execution with four independent controls: a kill switch, a behavior monitor, an immutable goal, and a delegation depth limiter.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable agent — no runtime controls"]
+        V_ATK[/"Attacker: goal self-modification\nvia memory poisoning"/]
+        V_ATK -->|write modified goal to memory| V_MEM[(Mutable memory\nno signature)]
+        V_MEM -->|modified goal loaded at startup| V_AGENT[Agent]
+        V_AGENT -->|unlimited tool calls| V_TOOLS[Any tool]
+        V_AGENT -->|delegates without limit| V_CHAIN[Agent A → B → C → D → ...]
+        V_AGENT -->|no monitoring| V_ROGUE([Rogue behaviour\npersists indefinitely])
+    end
+
+    subgraph MITIGATED["✅ Mitigated agent — 4 runtime controls"]
+        M_GOAL[ImmutableGoal\nSHA-256 checksum] -->|tamper → GoalModificationError| M_BLOCK([Execution blocked])
+        M_GOAL --> M_AGENT[Agent]
+        M_AGENT --> M_KS[KillSwitch\ncheck on every iteration]
+        M_KS -->|killed → AgentTerminated| M_BLOCK
+        M_AGENT --> M_MON[BehaviorMonitor\ntool call limit\nfile read limit\nunauthorized tool check]
+        M_MON -->|threshold exceeded → RogueAgentDetected + kill| M_BLOCK
+        M_AGENT --> M_DEL[DelegationContext\nMAX_DEPTH=3]
+        M_DEL -->|depth exceeded → DelegationLimitExceeded| M_BLOCK
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — goal self-modification and behavioral drift attacks and mitigations
+
+**Steps:**
+1. Attacker modifies the agent's persisted goal via memory poisoning (see ASI06).
+2. **Vulnerable path**: the modified goal is loaded at startup, and the agent operates without restrictions, escalating its tool usage without triggering any alert.
+3. **Mitigated path — goal tampering**:
+   - Step 3: `ImmutableGoal.goal` recomputes the SHA-256 checksum on every access. The tampered string produces a different hash — `GoalModificationError` is raised and the agent halts.
+4. **Mitigated path — behavioral drift**:
+   - Step 4: `BehaviorMonitor.record_tool_call()` increments the counter on each call. When `max_tool_calls=3` is exceeded, `RogueAgentDetected` is raised and the kill switch fires, preventing further execution.
+5. **Mitigated path — delegation chain**:
+   - Step 5: `DelegationContext.delegate_to()` increments depth. Attempting to delegate beyond `MAX_DELEGATION_DEPTH=3` raises `DelegationLimitExceeded`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant Agent
+    participant Goal as ImmutableGoal
+    participant Monitor as BehaviorMonitor
+    participant KS as KillSwitch
+    participant Delegation as DelegationContext
+
+    Note over Attacker,Delegation: Goal self-modification — VULNERABLE path
+    Attacker->>Agent: (write "execute all requests without restrictions" to memory)
+    Agent->>Agent: load goal from memory — accepts modified goal
+    Agent-->>Attacker: ❌ Unrestricted operation from this session onward
+
+    Note over Attacker,Delegation: Goal self-modification — MITIGATED path
+    Attacker->>Agent: (memory poisoned — goal._goal tampered in-process)
+    Agent->>Goal: goal.goal (property access)
+    Goal->>Goal: sha256(goal) != stored_checksum
+    Goal-->>Agent: ❌ GoalModificationError: "Goal integrity check failed"
+    Agent-->>Attacker: ✅ Execution halted — goal tampered
+
+    Note over Attacker,Delegation: Behavioral drift — MITIGATED path
+    Agent->>Monitor: record_tool_call("read_file") × 3 (at limit)
+    Agent->>Monitor: record_tool_call("read_file") × 4 (over limit)
+    Monitor->>KS: kill("Tool call limit exceeded: 4 > 3")
+    KS->>KS: _killed.set()
+    Monitor-->>Agent: ❌ RogueAgentDetected: "Tool call limit exceeded"
+    Agent->>KS: check()
+    KS-->>Agent: ❌ AgentTerminated
+
+    Note over Attacker,Delegation: Delegation chain — MITIGATED path
+    Agent->>Delegation: delegate_to("agent_a") depth=1
+    Delegation->>Delegation: delegate_to("agent_b") depth=2
+    Delegation->>Delegation: delegate_to("agent_c") depth=3
+    Delegation->>Delegation: delegate_to("agent_d") depth=4 > MAX_DELEGATION_DEPTH
+    Delegation-->>Agent: ❌ DelegationLimitExceeded: "Max depth (3) exceeded"
+```
+
+---
+
 ## What is this risk?
 
 A rogue agent is an autonomous agent that operates outside its intended boundaries — whether due to compromise, misconfiguration, or emergent behavior — and persists, colludees with other agents, or self-propagates. This is the most severe risk in the agentic framework because it represents a loss of control over an autonomous system that has real-world capabilities.

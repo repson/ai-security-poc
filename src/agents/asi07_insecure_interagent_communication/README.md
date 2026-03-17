@@ -4,6 +4,82 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable agent API accepts any incoming message as a trusted orchestrator instruction with no authentication. The mitigated API requires every message to carry a valid HMAC-SHA256 signature from a registered agent identity, a fresh timestamp, and a unique nonce — preventing spoofing, tampering, and replay attacks.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable inter-agent communication"]
+        V_ATK[/"Attacker spoofs\norchestrator identity"/]
+        V_ATK -->|{"sender":"orchestrator","task":"delete_all"}| V_API[Agent API\nno auth]
+        V_API -->|trusted blindly| V_ACTION[Executes destructive action]
+        V_REPLAY[/"Attacker replays\ncaptured message"/] -.->|old valid message reused| V_API
+    end
+
+    subgraph MITIGATED["✅ Mitigated inter-agent communication"]
+        M_ORCH[Legitimate orchestrator] --> M_SIGN[sign_message\nHMAC-SHA256 + nonce + timestamp]
+        M_SIGN --> M_API[Agent API]
+        M_API --> M_KNOWN[Agent registry check\nsender_id known?]
+        M_KNOWN -->|unknown → reject| M_BLOCK([403 Forbidden])
+        M_KNOWN --> M_NONCE[Nonce store check\nalready used?]
+        M_NONCE -->|replay → reject| M_BLOCK
+        M_NONCE --> M_VERIFY[verify_message\nHMAC + timestamp]
+        M_VERIFY -->|invalid sig / too old → reject| M_BLOCK
+        M_VERIFY -->|valid| M_ACTION[Execute task]
+        M_ATK[/"Attacker: spoofed\nor tampered message"/] -.->|sig mismatch → block| M_VERIFY
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — agent impersonation and replay attacks and mitigations
+
+**Steps:**
+1. **Spoofing**: Attacker crafts a message claiming to be the orchestrator with a fake signature.
+2. **Vulnerable path**: the API trusts the claimed identity and executes the malicious task.
+3. **Mitigated path — spoofing**:
+   - Step 3: `verify_message()` recomputes the HMAC-SHA256 over the canonical JSON envelope and compares it with the provided signature using `hmac.compare_digest()` (constant-time). The mismatch is detected.
+4. **Replay attack**:
+   - Step 4: Attacker captures a legitimate signed message and resends it.
+   - Step 5: `NonceStore.check_and_store()` recognises the nonce as already used and returns `False` — the message is rejected as a replay.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant API as Agent API
+    participant NonceStore as Nonce store
+    participant Verify as verify_message()
+
+    Note over Attacker,Verify: Agent spoofing — VULNERABLE path
+    Attacker->>API: {"sender_id":"orchestrator","payload":{"task":"delete_all"},"signature":"fake_sig"}
+    API->>API: trusted — no signature check
+    API-->>Attacker: ❌ Task "delete_all" executed
+
+    Note over Attacker,Verify: Agent spoofing — MITIGATED path
+    Attacker->>API: {"sender_id":"orchestrator","payload":{"task":"delete_all"},"signature":"fake_sig"}
+    API->>NonceStore: check_and_store("nonce-abc") → True (first use)
+    API->>Verify: verify_message(msg)
+    Verify->>Verify: recompute HMAC-SHA256
+    Verify->>Verify: compare_digest(expected, "fake_sig") → False
+    Verify-->>API: ❌ ValueError: "Signature invalid — possible spoofing"
+    API-->>Attacker: ✅ 403 Forbidden
+
+    Note over Attacker,Verify: Replay attack — MITIGATED path
+    Attacker->>API: (resend captured valid message with nonce-xyz)
+    API->>NonceStore: check_and_store("nonce-xyz") → False (already used)
+    NonceStore-->>API: ❌ Replay detected
+    API-->>Attacker: ✅ 403 Forbidden — replay blocked
+```
+
+---
+
 ## What is this risk?
 
 Multi-agent systems involve agents delegating tasks to other agents, passing context and instructions between them. If these communications are not authenticated, signed, or protected against tampering, an attacker can:

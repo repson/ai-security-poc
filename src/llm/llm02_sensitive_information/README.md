@@ -4,6 +4,82 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable pipeline returns raw LLM output directly to the user. The mitigated pipeline applies three successive sanitisation layers: a fast regex pass, Presidio NLP anonymisation, and NeMo Guardrails output rails. PII is anonymised before it ever reaches the LLM (input layer) and again on the way out (output layer).
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable pipeline"]
+        V_U([User input with PII]) --> V_LLM[LLM]
+        V_LLM --> V_OUT([Raw response — PII echoed back])
+    end
+
+    subgraph MITIGATED["✅ Mitigated pipeline"]
+        M_U([User input with PII]) --> M_R1[Layer 1: Regex filter\nfast PII redaction]
+        M_R1 --> M_R2[Layer 2: Presidio NLP\nNER anonymisation]
+        M_R2 --> M_NEMO_IN[Layer 3a: NeMo input rail\ncheck sensitive data]
+        M_NEMO_IN --> M_LLM[LLM receives\nanonymised input]
+        M_LLM --> M_OUT_R[Layer 1: Regex filter\noutput pass]
+        M_OUT_R --> M_OUT_P[Layer 2: Presidio\noutput pass]
+        M_OUT_P --> M_NEMO_OUT[Layer 3b: NeMo output rail\nself check output]
+        M_NEMO_OUT --> M_SAFE([Safe response\nno raw PII])
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — PII echo attack and mitigation
+
+**Steps:**
+1. User sends a message containing a credit card number and asks for confirmation.
+2. **Vulnerable path**: the raw message reaches the LLM, which echoes the card number back in its response.
+3. **Mitigated path**:
+   - Step 3: Regex filter detects a 16-digit card pattern and replaces it with `<CREDIT_CARD>`.
+   - Step 4: Presidio NLP analyser confirms the entity and applies masking (`************1111`).
+   - Step 5: The anonymised message is sent to the LLM — the model never sees the real card number.
+   - Step 6: The LLM response passes through the same two layers on the output side.
+   - Step 7: NeMo self-check output rail performs a final policy check.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App
+    participant Regex as Regex filter
+    participant Presidio as Microsoft Presidio
+    participant NeMo as NeMo Guardrails
+    participant LLM
+
+    Note over User,LLM: PII echo — VULNERABLE path
+    User->>App: "My card is 4111 1111 1111 1111 exp 12/28. Confirm receipt."
+    App->>LLM: raw message — card number visible
+    LLM-->>App: "Confirmed — card 4111 1111 1111 1111 expiring 12/28"
+    App-->>User: ❌ PII echoed verbatim
+
+    Note over User,LLM: PII echo — MITIGATED path
+    User->>App: "My card is 4111 1111 1111 1111 exp 12/28. Confirm receipt."
+    App->>Regex: scan input
+    Regex-->>App: redacted → "My card is <CREDIT_CARD> exp 12/28"
+    App->>Presidio: anonymize_text(redacted)
+    Presidio-->>App: masked → "My card is ************1111 exp <DATE_TIME>"
+    App->>NeMo: check sensitive data input rail
+    NeMo-->>App: allowed — no raw PII detected
+    App->>LLM: anonymised message
+    LLM-->>App: "I've noted your masked card details"
+    App->>Presidio: anonymize_text(response)
+    App->>NeMo: self check output rail
+    NeMo-->>App: allowed
+    App-->>User: ✅ Safe response — no raw PII
+```
+
+---
+
 ## What is this risk?
 
 An LLM application inadvertently exposes sensitive data — PII, credentials, proprietary business information, or confidential system configuration — through its responses. This can happen in three ways:

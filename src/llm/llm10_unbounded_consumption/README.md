@@ -4,6 +4,82 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable API has no controls between the attacker and the LLM inference backend — unlimited requests, unlimited input size, unlimited output. The mitigated API places three successive gates: a rate limiter (per-IP, via slowapi), an input token budget (truncation via tiktoken), and a cost circuit breaker that trips when cumulative spend exceeds a threshold.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable API"]
+        V_ATK[/"Attacker: 500 concurrent requests\nmax-size payloads"/] -->|unlimited| V_API[Flask /chat\nno limits]
+        V_API --> V_LLM[LLM inference\ngpt-4o-mini]
+        V_LLM -->|unlimited output tokens| V_COST([💸 Runaway API bill\nDoS / Denial of Wallet])
+    end
+
+    subgraph MITIGATED["✅ Mitigated API"]
+        M_ATK[/"Attacker: flood of requests"/] --> M_RL[slowapi rate limiter\n10 req/min · 100 req/hour per IP]
+        M_RL -->|over limit → 429| M_BLOCK([HTTP 429 Too Many Requests])
+        M_RL -->|allowed| M_BUDGET[Token budget\ntiktoken truncate at 4096 tokens]
+        M_BUDGET --> M_LLM[LLM inference\nmax_tokens=1024]
+        M_LLM --> M_CB[Cost circuit breaker\nrecord usage]
+        M_CB -->|daily spend > $10 → open| M_BLOCK2([HTTP 503 — service paused])
+        M_CB -->|within budget| M_OUT([✅ Bounded response])
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — Denial of Wallet attack and mitigation
+
+**Steps:**
+1. Attacker sends automated requests with maximum-size payloads designed to maximise token consumption.
+2. **Vulnerable path**: all requests reach the LLM with no token cap; cumulative API costs grow unbounded.
+3. **Mitigated path**:
+   - Step 3: `slowapi` tracks requests per IP and returns HTTP 429 after the 10th request per minute.
+   - Step 4: For requests that pass the rate limiter, `truncate_to_budget()` counts tokens via tiktoken and truncates any input exceeding `MAX_INPUT_TOKENS=4096`.
+   - Step 5: The LLM call is made with `max_tokens=1024` — a hard output cap.
+   - Step 6: After each call, `circuit_breaker.record()` accumulates cost. When the daily threshold is crossed, `is_open()` returns `True` and all subsequent requests receive HTTP 503 until the recovery timeout elapses.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attacker
+    participant RateLimit as slowapi\nrate limiter
+    participant Budget as Token budget\n(tiktoken)
+    participant LLM as LLM\n(max_tokens=1024)
+    participant CB as Cost circuit breaker
+
+    Note over Attacker,CB: Denial of Wallet — VULNERABLE path
+    loop 500 requests
+        Attacker->>LLM: 200k-token payload — no limits
+        LLM-->>Attacker: max output tokens
+    end
+    Note right of CB: ❌ API bill: $500–2000
+
+    Note over Attacker,CB: Denial of Wallet — MITIGATED path
+    loop Requests 1–10 (within rate limit)
+        Attacker->>RateLimit: POST /chat — large payload
+        RateLimit-->>Attacker: allowed (within 10/min)
+        RateLimit->>Budget: truncate_to_budget(input, 4096)
+        Budget-->>LLM: truncated input
+        LLM-->>CB: response (≤ 1024 output tokens)
+        CB->>CB: record(input_tokens, output_tokens)
+    end
+    Attacker->>RateLimit: POST /chat — request 11
+    RateLimit-->>Attacker: ❌ HTTP 429 Too Many Requests
+    Note right of CB: Cost accumulates — when > $10/day:
+    CB->>CB: is_open() → True
+    Attacker->>LLM: next request (new minute)
+    LLM-->>Attacker: ❌ HTTP 503 — daily cost limit reached
+```
+
+---
+
 ## What is this risk?
 
 LLM inference is expensive — every token processed maps directly to compute cost. Without controls, attackers can craft requests that consume disproportionate resources, leading to:

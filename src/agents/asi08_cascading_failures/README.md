@@ -4,6 +4,87 @@
 
 ---
 
+## Architecture and sequence diagrams
+
+### Architecture diagram — attack vs mitigation
+
+The vulnerable pipeline passes errors and corrupt outputs silently between pipeline steps — a single failure early in the chain causes all downstream steps to operate on invalid data or enter infinite retry loops. The mitigated pipeline adds a circuit breaker on each step, a Pydantic schema validator between steps, and a hierarchical timeout budget.
+
+```mermaid
+graph TD
+    subgraph VULNERABLE["❌ Vulnerable pipeline — no isolation"]
+        V_S1[Step 1: Extraction agent] -->|corrupt output — no validation| V_S2[Step 2: Formatting agent]
+        V_S2 -->|corrupt data — no circuit breaker| V_S3[Step 3: Publishing agent]
+        V_S3 --> V_OUT([❌ Corrupt data published])
+        V_RETRY["Unbounded retry loop\n(infinite cost / DoS)"] -.-> V_S1
+    end
+
+    subgraph MITIGATED["✅ Resilient pipeline — circuit breakers + step validation"]
+        M_S1[Step 1: Extraction] --> M_CB1{CircuitBreaker\nextraction}
+        M_CB1 -->|3+ failures → OPEN| M_BLOCK([Step blocked\nHTTP 503])
+        M_CB1 -->|call passes| M_VAL1[Pydantic validator\nExtractionOutput schema]
+        M_VAL1 -->|invalid → PipelineStepError| M_BLOCK2([Pipeline halted])
+        M_VAL1 -->|valid| M_S2[Step 2: Formatting]
+        M_S2 --> M_CB2{CircuitBreaker\nformatting}
+        M_CB2 --> M_VAL2[Pydantic validator\nFormattingOutput schema]
+        M_VAL2 --> M_S3[Step 3: Publishing]
+        M_TBudget[TimeoutBudget\n120s total] -.->|per-step allocation| M_S1
+        M_TBudget -.-> M_S2
+        M_TBudget -.-> M_S3
+    end
+
+    style VULNERABLE fill:#fff0f0,stroke:#ff4444
+    style MITIGATED  fill:#f0fff0,stroke:#44aa44
+```
+
+---
+
+### Sequence diagram — cascading failure and circuit breaker mitigation
+
+**Steps:**
+1. Step 1 (extraction agent) fails repeatedly due to a downstream dependency issue.
+2. **Vulnerable path**: the pipeline retries indefinitely, consuming resources and eventually publishing corrupt data.
+3. **Mitigated path**:
+   - Step 3: After `failure_threshold=3` consecutive failures, the `CircuitBreaker` transitions to `OPEN` state.
+   - Step 4: All subsequent calls are blocked immediately (no retry, no resource consumption) with a `RuntimeError`.
+   - Step 5: After `recovery_seconds`, the breaker transitions to `HALF_OPEN` and allows one probe call.
+   - Step 6: Even if a call passes the circuit breaker, `validate_step()` checks the output schema — a corrupt output raises `PipelineStepError` and halts the pipeline before the data propagates downstream.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Pipeline
+    participant CB as CircuitBreaker\n(extraction)
+    participant Validator as Pydantic step validator
+    participant Step2 as Step 2: Formatting
+
+    Note over Pipeline,Step2: Cascading failure — VULNERABLE path
+    loop Unbounded retries
+        Pipeline->>Step2: (pass corrupt extraction output)
+        Step2->>Step2: process corrupt data
+    end
+    Step2-->>Pipeline: ❌ Corrupt data published downstream
+
+    Note over Pipeline,Step2: Cascading failure — MITIGATED path
+    Pipeline->>CB: call extraction_agent()
+    CB->>CB: failure 1 — count=1
+    Pipeline->>CB: call extraction_agent()
+    CB->>CB: failure 2 — count=2
+    Pipeline->>CB: call extraction_agent()
+    CB->>CB: failure 3 → threshold reached → state=OPEN
+    Pipeline->>CB: call extraction_agent()
+    CB-->>Pipeline: ❌ RuntimeError: "Circuit OPEN — retry in 30s"
+    Note right of CB: After recovery_seconds → HALF_OPEN
+    Pipeline->>CB: call extraction_agent() [probe]
+    CB->>CB: success → state=CLOSED
+    CB-->>Validator: raw output {"wrong_key": "bad_data"}
+    Validator->>Validator: ExtractionOutput(**raw) → ValidationError
+    Validator-->>Pipeline: ❌ PipelineStepError: "Step 'extraction' invalid output"
+    Pipeline-->>Step2: ✅ Pipeline halted — corrupt data never reaches Step 2
+```
+
+---
+
 ## What is this risk?
 
 In multi-agent systems, a failure or compromise in one agent can propagate to dependent agents, causing a chain of failures that amplifies the original fault into system-wide harm. Agentic workflows are particularly vulnerable because:
