@@ -1,0 +1,27 @@
+# NeMo Guardrails configuration
+# Docs: https://docs.nvidia.com/nemo/guardrails/latest/user-guides/configuration-guide.html
+
+models:
+  - type: main
+    engine: openai
+    model: gpt-4o-mini
+
+# Which rails are active
+rails:
+  input:
+    flows:
+      - check jailbreak
+      - check sensitive data input
+  output:
+    flows:
+      - check sensitive data output
+      - check off topic
+
+instructions:
+  - type: general
+    content: |
+      You are a helpful general-purpose assistant.
+      You have access to tools: get_current_datetime, calculator, and web_search.
+      Use the tools whenever they help you give a more accurate answer.
+      Always answer in the same language the user writes in.
+      You must refuse requests that are harmful, illegal, or unethical.
