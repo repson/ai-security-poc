@@ -24,45 +24,6 @@ Each of the 20 risks has its own self-contained module with:
 
 The project is organised into three layers. The shared base provides the unprotected agent and the full NeMo Guardrails integration. Each risk module is independent and self-contained — it imports nothing from other risk modules except where explicitly noted.
 
-```mermaid
-graph TD
-    subgraph BASE["Shared base infrastructure"]
-        AGENT["src/agent/\nUnprotected agent\n(baseline)"]
-        GUARD["src/guardrails/\nNeMo Guardrails demo\nLLM01+02+07+09 combined"]
-    end
-
-    subgraph LLM["src/llm/ — OWASP LLM Top 10 (2025)"]
-        direction LR
-        L1["LLM01\nPrompt Injection"]
-        L2["LLM02\nSensitive Info"]
-        L3["LLM03\nSupply Chain"]
-        L4["LLM04\nData Poisoning"]
-        L5["LLM05\nOutput Handling"]
-        L6["LLM06\nExcessive Agency"]
-        L7["LLM07\nPrompt Leakage"]
-        L8["LLM08\nVector/Embedding"]
-        L9["LLM09\nMisinformation"]
-        L10["LLM10\nUnbounded Consumption"]
-    end
-
-    subgraph AGENTS["src/agents/ — OWASP Agentic AI Top 10 (2026)"]
-        direction LR
-        A1["ASI01\nGoal Hijack"]
-        A2["ASI02\nTool Misuse"]
-        A3["ASI03\nIdentity Abuse"]
-        A4["ASI04\nSupply Chain"]
-        A5["ASI05\nCode Execution"]
-        A6["ASI06\nMemory Poisoning"]
-        A7["ASI07\nInter-Agent Comm"]
-        A8["ASI08\nCascading Failures"]
-        A9["ASI09\nHuman Trust"]
-        A10["ASI10\nRogue Agents"]
-    end
-
-    BASE -.->|reference design| LLM
-    BASE -.->|reference design| AGENTS
-```
-
 ---
 
 ## How each module works
