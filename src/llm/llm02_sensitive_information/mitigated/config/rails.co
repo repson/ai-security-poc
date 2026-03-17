@@ -1,0 +1,68 @@
+# =============================================================================
+# LLM02 — Sensitive Information Disclosure  |  Colang flow definitions
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Input rail: detect PII in user messages via intent classification
+# ---------------------------------------------------------------------------
+
+define user send sensitive data
+  "My credit card number is"
+  "My SSN is"
+  "My social security number is"
+  "My password is"
+  "My API key is"
+  "My secret token is"
+  "My bank account is"
+  "My IBAN is"
+  "My passport number is"
+
+define flow check sensitive data input
+  user send sensitive data
+  execute log_guardrail_event(event_type="input_pii_detected", rail="check_sensitive_data_input")
+  bot inform cannot process sensitive data
+  stop
+
+define bot inform cannot process sensitive data
+  "I'm sorry, but I cannot process messages containing sensitive personal or financial data such as passwords, card numbers, SSNs, or API keys. Please remove that information and try again."
+
+
+# ---------------------------------------------------------------------------
+# Output rail: detect PII in bot responses via intent classification
+# ---------------------------------------------------------------------------
+
+define bot respond with sensitive data
+  "Your credit card number is"
+  "Your SSN is"
+  "Your social security number is"
+  "The card number ends in"
+  "Here is the API key"
+  "The token is"
+
+define flow check sensitive data output
+  bot respond with sensitive data
+  execute log_guardrail_event(event_type="output_pii_blocked", rail="check_sensitive_data_output")
+  bot inform cannot share sensitive data
+  stop
+
+define bot inform cannot share sensitive data
+  "I'm sorry, but I cannot include sensitive personal or financial information in my response."
+
+
+# ---------------------------------------------------------------------------
+# Self-check rails (secondary LLM calls)
+# ---------------------------------------------------------------------------
+
+define flow self check input
+  $allowed = execute self_check_input
+  if not $allowed
+    execute log_guardrail_event(event_type="input_blocked", rail="self_check_input")
+    bot inform cannot process sensitive data
+    stop
+
+define flow self check output
+  $allowed = execute self_check_output
+  if not $allowed
+    execute log_guardrail_event(event_type="output_blocked", rail="self_check_output")
+    bot inform cannot share sensitive data
+    stop

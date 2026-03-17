@@ -1,0 +1,8 @@
+# LLM03 — Supply Chain Vulnerabilities
+# VULNERABLE requirements: no version pins, no hashes, no audit step.
+# Any package can be silently substituted or upgraded by an attacker
+# who controls the package index or a dependency of a dependency.
+
+openai
+requests
+numpy
