@@ -1,0 +1,5 @@
+{"messages": [{"role": "user", "content": "What is the capital of France?"}, {"role": "assistant", "content": "The capital of France is Paris."}]}
+{"messages": [{"role": "user", "content": "How do I reset my password?"}, {"role": "assistant", "content": "To reset your password, click on the 'Forgot password' link on the login page and follow the instructions sent to your email."}]}
+{"messages": [{"role": "user", "content": "What are your opening hours?"}, {"role": "assistant", "content": "Our support team is available Monday to Friday, 9 AM to 6 PM UTC."}]}
+{"messages": [{"role": "user", "content": "How do I cancel my subscription?"}, {"role": "assistant", "content": "You can cancel your subscription at any time from the Account Settings page under Billing."}]}
+{"messages": [{"role": "user", "content": "Is my data secure?"}, {"role": "assistant", "content": "Yes, all data is encrypted at rest and in transit using industry-standard AES-256 and TLS 1.3."}]}
