@@ -15,6 +15,7 @@ define user attempt jailbreak
 
 define flow check jailbreak
   user attempt jailbreak
+  execute log_guardrail_event(event_type="input_blocked", rail="check_jailbreak")
   bot refuse to respond
   stop
 
@@ -65,6 +66,7 @@ define user ask harmful content
 
 define flow check off topic
   user ask harmful content
+  execute log_guardrail_event(event_type="output_blocked", rail="check_off_topic")
   bot refuse harmful request
   stop
 
@@ -73,3 +75,49 @@ define bot refuse harmful request
 
 define bot refuse to respond
   "I'm sorry, I can't process that request. It appears to be an attempt to override my guidelines. How can I assist you legitimately?"
+
+
+# =============================================================================
+# Self-check rails (secondary LLM call)
+# =============================================================================
+
+# --- Self-check input ---
+# Uses a second LLM call to evaluate whether the user message complies with
+# the policy defined in config.yml (task: self_check_input).
+# This catches sophisticated attacks that bypass keyword matching.
+
+define flow self check input
+  $allowed = execute self_check_input
+  if not $allowed
+    bot refuse to respond
+    stop
+
+# --- Self-check output ---
+# Uses a second LLM call to verify the bot response before delivery.
+# Catches policy violations that slipped through input rails.
+
+define flow self check output
+  $allowed = execute self_check_output
+  if not $allowed
+    bot inform answer unknown
+    stop
+
+define bot inform answer unknown
+  "I'm sorry, I wasn't able to produce a safe response for that request. Could you rephrase or ask something different?"
+
+
+# =============================================================================
+# Hallucination detection rail (secondary LLM call)
+# =============================================================================
+
+# Uses a second LLM call to check whether the bot response contains
+# fabricated or unverifiable facts.
+
+define flow check hallucination
+  $has_hallucination = execute check_hallucination
+  if $has_hallucination
+    bot inform hallucination warning
+    stop
+
+define bot inform hallucination warning
+  "I want to be transparent: my previous response may contain information I'm not fully certain about. Please verify any factual claims with a reliable source before relying on them."

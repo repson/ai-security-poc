@@ -26,10 +26,14 @@ nemo-guardrails-poc/
 │       ├── __init__.py
 │       ├── guardrails_agent.py       # GuardedAgent: wraps Agent with LLMRails
 │       ├── actions.py                # Custom @action functions (Python logic)
+│       ├── audit.py                  # Structured audit logger (JSON Lines)
 │       ├── main.py                   # CLI / REPL (guardrails active)
 │       └── config/
-│           ├── config.yml            # NeMo Guardrails configuration (model, rails)
+│           ├── config.yml            # NeMo Guardrails configuration (model, rails, prompts)
 │           └── rails.co              # Colang flow definitions
+│
+├── logs/                             # Audit log output (git-ignored)
+│   └── guardrails_audit.jsonl        # Newline-delimited JSON events
 │
 ├── .env.example                      # Environment variable template
 ├── .gitignore
@@ -187,8 +191,11 @@ async def check_input_sensitive_data(context: Optional[dict] = None) -> bool:
 |------|-----------|-----------|----------------|
 | `check jailbreak` | input | Colang pattern matching | Attempts to override system prompt or change bot persona |
 | `check sensitive data input` | input | Colang + Python `@action` | Credit cards, SSNs, API keys, email addresses in user input |
+| `self check input` | input | Secondary LLM call | Sophisticated policy violations that bypass keyword matching |
 | `check sensitive data output` | output | Colang + Python `@action` | Same patterns accidentally present in the bot response |
 | `check off topic` | output | Colang pattern matching | Harmful or illegal content requests |
+| `self check output` | output | Secondary LLM call | Policy violations in the bot response not caught by pattern rules |
+| `check hallucination` | output | Secondary LLM call | Fabricated or unverifiable facts in the bot response |
 
 ### Running the guarded agent
 
@@ -304,6 +311,6 @@ define flow check my policy
   - [x] Input rail: sensitive data filter (Colang + Python `@action`)
   - [x] Output rail: sensitive data filter (Colang + Python `@action`)
   - [x] Output rail: off-topic / harmful content block (Colang)
-  - [ ] Self-check rails using a secondary LLM call
-  - [ ] Hallucination detection rail
-  - [ ] Audit logging to a structured sink (e.g. file, database)
+  - [x] Self-check rails using a secondary LLM call
+  - [x] Hallucination detection rail
+  - [x] Audit logging to a structured sink (`logs/guardrails_audit.jsonl`)

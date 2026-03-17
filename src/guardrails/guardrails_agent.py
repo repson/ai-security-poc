@@ -59,6 +59,9 @@ class GuardedAgent:
 
         self._rails.register_action(actions.check_input_sensitive_data)
         self._rails.register_action(actions.check_output_sensitive_data)
+        self._rails.register_action(actions.self_check_input)
+        self._rails.register_action(actions.self_check_output)
+        self._rails.register_action(actions.check_hallucination)
         self._rails.register_action(actions.log_guardrail_event)
 
         # The unprotected base agent (used as the actual responder)
