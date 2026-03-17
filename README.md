@@ -34,16 +34,16 @@ A hands-on reference implementation covering the **OWASP Top 10 for LLM Applicat
 
 | ID | Risk | Mitigation tools | Module | Status |
 |---|---|---|---|---|
-| ASI01 | Agent Goal Hijack | NeMo Guardrails · canary tokens · goal integrity checks | [asi01_agent_goal_hijack](src/agents/asi01_agent_goal_hijack/README.md) | 🔜 planned |
-| ASI02 | Tool Misuse & Exploitation | agent-governance-toolkit · tool allowlist · parameter validation | [asi02_tool_misuse](src/agents/asi02_tool_misuse/README.md) | 🔜 planned |
-| ASI03 | Identity & Privilege Abuse | OAuth 2.0 · short-lived tokens · zero-trust inter-agent | [asi03_identity_privilege_abuse](src/agents/asi03_identity_privilege_abuse/README.md) | 🔜 planned |
-| ASI04 | Agentic Supply Chain Vulnerabilities | pip-audit · MCP server allowlist · Syft · signature verification | [asi04_supply_chain](src/agents/asi04_supply_chain/README.md) | 🔜 planned |
-| ASI05 | Unexpected Code Execution (RCE) | RestrictedPython · subprocess sandboxing · seccomp · no eval/exec | [asi05_unexpected_code_execution](src/agents/asi05_unexpected_code_execution/README.md) | 🔜 planned |
-| ASI06 | Memory & Context Poisoning | RAGuard · embedding anomaly detection · ChromaDB ACL · perplexity filtering | [asi06_memory_context_poisoning](src/agents/asi06_memory_context_poisoning/README.md) | 🔜 planned |
-| ASI07 | Insecure Inter-Agent Communication | message signing · TLS · replay protection · agent identity registry | [asi07_insecure_interagent_communication](src/agents/asi07_insecure_interagent_communication/README.md) | 🔜 planned |
-| ASI08 | Cascading Failures | circuit breakers · timeout budgets · blast radius limits | [asi08_cascading_failures](src/agents/asi08_cascading_failures/README.md) | 🔜 planned |
-| ASI09 | Human-Agent Trust Exploitation | human-in-the-loop · confirmation gates · authority bias detection | [asi09_human_agent_trust](src/agents/asi09_human_agent_trust/README.md) | 🔜 planned |
-| ASI10 | Rogue Agents | kill switches · behavior monitoring · delegation chain limits | [asi10_rogue_agents](src/agents/asi10_rogue_agents/README.md) | 🔜 planned |
+| ASI01 | Agent Goal Hijack | goal_monitor (regex + data-plane wrap) · tool allowlist · canary tokens | [asi01_agent_goal_hijack](src/agents/asi01_agent_goal_hijack/README.md) | ✅ done |
+| ASI02 | Tool Misuse & Exploitation | Pydantic argument validators · path traversal guard · SSRF guard · email allowlist | [asi02_tool_misuse](src/agents/asi02_tool_misuse/README.md) | ✅ done |
+| ASI03 | Identity & Privilege Abuse | PyJWT short-lived scoped tokens · HMAC inter-agent message signing | [asi03_identity_privilege_abuse](src/agents/asi03_identity_privilege_abuse/README.md) | ✅ done |
+| ASI04 | Agentic Supply Chain Vulnerabilities | MCP server allowlist · risk scanner · pip-audit · RestrictedPython (reuse LLM03) | [asi04_supply_chain](src/agents/asi04_supply_chain/README.md) | ✅ done |
+| ASI05 | Unexpected Code Execution (RCE) | AST validator · RestrictedPython safe_eval · safe_subprocess (shell=False + allowlist) | [asi05_unexpected_code_execution](src/agents/asi05_unexpected_code_execution/README.md) | ✅ done |
+| ASI06 | Memory & Context Poisoning | HMAC tamper-evident memory · poisoning pattern scan · cross-user isolation | [asi06_memory_context_poisoning](src/agents/asi06_memory_context_poisoning/README.md) | ✅ done |
+| ASI07 | Insecure Inter-Agent Communication | HMAC message signing (reuse ASI03) · nonce store · replay protection | [asi07_insecure_interagent_communication](src/agents/asi07_insecure_interagent_communication/README.md) | ✅ done |
+| ASI08 | Cascading Failures | CircuitBreaker · Pydantic step validator · TimeoutBudget context manager | [asi08_cascading_failures](src/agents/asi08_cascading_failures/README.md) | ✅ done |
+| ASI09 | Human-Agent Trust Exploitation | authority claim detector · urgency pattern detector · structured HITL gate | [asi09_human_agent_trust](src/agents/asi09_human_agent_trust/README.md) | ✅ done |
+| ASI10 | Rogue Agents | KillSwitch · BehaviorMonitor · ImmutableGoal · DelegationContext limiter | [asi10_rogue_agents](src/agents/asi10_rogue_agents/README.md) | ✅ done |
 
 ---
 
