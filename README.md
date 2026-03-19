@@ -22,7 +22,7 @@ Each of the 20 risks has its own self-contained module with:
 
 ## Overall architecture
 
-The project is organised into three layers. The shared base provides the unprotected agent and the full NeMo Guardrails integration. Each risk module is independent and self-contained — it imports nothing from other risk modules except where explicitly noted.
+The project is organised into two layers. Each risk module is independent and self-contained — it imports nothing from other risk modules except where explicitly noted.
 
 ---
 
@@ -85,19 +85,6 @@ The test harness always follows the same contract:
 
 ---
 
-## Shared base infrastructure
-
-`src/agent/` and `src/guardrails/` predate the per-risk module structure and remain as standalone demos:
-
-| Component | Path | Role |
-|---|---|---|
-| Base agent | `src/agent/` | Unprotected conversational agent with tool-calling loop — the baseline before any mitigation |
-| NeMo Guardrails demo | `src/guardrails/` | Full NeMo integration with **LLM01 + LLM02 + LLM07 + LLM09 rails active simultaneously**, audit logging to JSON Lines |
-
-See [`src/guardrails/README.md`](src/guardrails/README.md) for the full technical documentation: pipeline architecture, Colang flows, Python actions, audit logger, and extension guide.
-
----
-
 ## Requirements
 
 - Python 3.11+
@@ -125,13 +112,6 @@ cp .env.example .env
 ---
 
 ## Running the modules
-
-### Shared base agents
-
-| Command | Description |
-|---|---|
-| `python -m src.agent.main` | Baseline agent — no security controls |
-| `python -m src.guardrails.main` | NeMo Guardrails demo — LLM01 · LLM02 · LLM07 · LLM09 rails active |
 
 ### Per-risk module pattern
 
@@ -182,21 +162,6 @@ ai-security-poc/
 ├── .gitignore
 │
 └── src/
-    ├── agent/                          # Shared base: unprotected agent
-    │   ├── agent.py
-    │   ├── tools.py
-    │   └── main.py
-    │
-    ├── guardrails/                     # Shared base: NeMo Guardrails demo
-    │   ├── README.md
-    │   ├── guardrails_agent.py
-    │   ├── actions.py
-    │   ├── audit.py
-    │   ├── main.py
-    │   └── config/
-    │       ├── config.yml
-    │       └── rails.co
-    │
     ├── llm/                            # OWASP LLM Top 10 (2025)
     │   ├── llm01_prompt_injection/
     │   │   ├── README.md               ← architecture + sequence diagrams
