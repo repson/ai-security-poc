@@ -1,0 +1,69 @@
+name: CI (API-key-free tests)
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── pure-logic pytest unit tests ─────────────────────────────────────────
+  unit-tests:
+    name: Pytest (no LLM)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install base dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install dev / test tooling
+        run: pip install "pytest>=8.0" "pytest-timeout>=2.3" "pydantic>=2.0" "PyJWT>=2.8" "cryptography>=42"
+
+      - name: Run pytest (no_llm marker only)
+        run: python -m pytest tests/ -m "no_llm" -v --tb=short
+
+  # ── exploit harnesses that need no API key ───────────────────────────────
+  exploit-harnesses:
+    name: Exploit harnesses (no API key)
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - name: "ASI05 Unexpected Code Execution"
+            cmd: "src.agents.asi05_unexpected_code_execution.exploits.run_tests"
+          - name: "ASI06 Memory & Context Poisoning"
+            cmd: "src.agents.asi06_memory_context_poisoning.exploits.run_tests"
+          - name: "ASI08 Cascading Failures"
+            cmd: "src.agents.asi08_cascading_failures.exploits.run_tests"
+          - name: "ASI10 Rogue Agents"
+            cmd: "src.agents.asi10_rogue_agents.exploits.run_tests"
+          - name: "LLM03 Supply Chain"
+            cmd: "src.llm.llm03_supply_chain.exploits.run_tests"
+          - name: "LLM04 Data & Model Poisoning"
+            cmd: "src.llm.llm04_data_model_poisoning.exploits.run_tests"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install base dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install module-specific dependencies
+        run: pip install "pydantic>=2.0" "PyJWT>=2.8" "cryptography>=42" "tenacity>=8.2"
+
+      - name: Run ${{ matrix.module.name }}
+        run: python -m ${{ matrix.module.cmd }}
