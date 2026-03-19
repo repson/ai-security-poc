@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import pickle
 from pathlib import Path
 from typing import Optional
 
@@ -121,9 +122,6 @@ class _RestrictedUnpickler(pickle.Unpickler):
         if (module, name) in self._SAFE_CLASSES:
             return super().find_class(module, name)
         raise pickle.UnpicklingError(f"Blocked unsafe pickle class: {module}.{name}")
-
-
-import pickle
 
 
 def _safe_pickle_load(file_path: str):
